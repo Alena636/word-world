@@ -207,6 +207,8 @@ const THEMES = {
     ipaColor: "#7a8fba",
     speakBg: "rgba(232,160,32,0.12)",
     speakText: "#f5bb4a",
+    tooltipBg: "#2a2520",
+    tooltipBorder: "rgba(232,160,32,0.3)",
   },
   light: {
     bg: "#faf7f2",
@@ -238,6 +240,8 @@ const THEMES = {
     ipaColor: "#4a6090",
     speakBg: "rgba(180,83,9,0.09)",
     speakText: "#92400e",
+    tooltipBg: "#ffffff",
+    tooltipBorder: "rgba(180,83,9,0.3)",
   },
 };
 
@@ -288,6 +292,232 @@ function speakWord(word) {
   window.speechSynthesis.speak(utt);
 }
 
+// ── Word Tooltip ─────────────────────────────────────────────────
+function WordTooltip({ word, T, isDark, onClose }) {
+  const [speaking, setSpeaking] = useState(false);
+  if (!word) return null;
+  const tc = TYPE_COLORS[isDark ? "dark" : "light"];
+  const c = tc[word.type] || tc.noun;
+
+  const handleSpeak = () => {
+    setSpeaking(true);
+    speakWord(word.word);
+    setTimeout(() => setSpeaking(false), 1200);
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+        background: T.tooltipBg,
+        borderTop: `2px solid ${T.accent}`,
+        borderRadius: "16px 16px 0 0",
+        padding: "20px 20px 32px",
+        boxShadow: "0 -8px 40px rgba(0,0,0,0.25)",
+        animation: "slideUp 0.22s ease",
+      }}
+    >
+      {/* drag handle */}
+      <div
+        style={{
+          width: 36,
+          height: 3,
+          borderRadius: 2,
+          background: T.border,
+          margin: "0 auto 18px",
+        }}
+      />
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginBottom: 12,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              color: T.text,
+              fontFamily: "'Inter', sans-serif",
+            }}
+          >
+            {word.word}
+          </span>
+          <button
+            onClick={handleSpeak}
+            style={{
+              background: speaking ? T.accentBg : T.speakBg,
+              border: `1px solid ${speaking ? T.accentBorder : "transparent"}`,
+              borderRadius: "50%",
+              width: 36,
+              height: 36,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              fontSize: 16,
+              color: T.speakText,
+              transform: speaking ? "scale(1.15)" : "scale(1)",
+              transition: "all 0.12s",
+            }}
+          >
+            {speaking ? "🔊" : "🔈"}
+          </button>
+          <span
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: c.accent,
+              background: c.bg,
+              border: `1px solid ${c.border}`,
+              borderRadius: 4,
+              padding: "3px 10px",
+              fontWeight: 700,
+            }}
+          >
+            {word.type}
+          </span>
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            background: "transparent",
+            border: `1px solid ${T.border}`,
+            borderRadius: 8,
+            width: 34,
+            height: 34,
+            cursor: "pointer",
+            color: T.textMuted,
+            fontSize: 18,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          ✕
+        </button>
+      </div>
+
+      {word.ipa && (
+        <div
+          style={{
+            fontSize: 15,
+            color: T.ipaColor,
+            marginBottom: 10,
+            fontFamily: "monospace",
+            letterSpacing: "0.06em",
+          }}
+        >
+          {word.ipa}
+        </div>
+      )}
+      <div
+        style={{
+          fontSize: 17,
+          color: T.text,
+          lineHeight: 1.55,
+          marginBottom: 10,
+          fontWeight: 400,
+        }}
+      >
+        {word.definition}
+      </div>
+      <div
+        style={{
+          fontSize: 15,
+          color: T.textFaint,
+          fontStyle: "italic",
+          lineHeight: 1.5,
+        }}
+      >
+        "{word.example}"
+      </div>
+    </div>
+  );
+}
+
+// ── Clickable Story Text ─────────────────────────────────────────
+function ClickableStory({ text, vocabulary, highlighted, T, onWordClick }) {
+  if (!text) return null;
+
+  // build a map of vocab words (lowercase) → item
+  const vocabMap = {};
+  (vocabulary || []).forEach((item) => {
+    vocabMap[item.word.toLowerCase()] = item;
+  });
+
+  // split text into tokens (words + punctuation/spaces)
+  const tokens = text.split(/(\s+|[.,!?;:"""''()\-–—])/);
+
+  return (
+    <span>
+      {tokens.map((token, i) => {
+        const clean = token.replace(/[^a-zA-Z'-]/g, "").toLowerCase();
+        const vocabItem = vocabMap[clean];
+        const isHighlighted =
+          highlighted && clean === highlighted.toLowerCase();
+
+        if (vocabItem) {
+          return (
+            <span
+              key={i}
+              onClick={() => onWordClick(vocabItem)}
+              style={{
+                cursor: "pointer",
+                borderBottom: `2px solid ${
+                  isHighlighted ? "#fbbf24" : T.accent
+                }`,
+                background: isHighlighted
+                  ? "rgba(251,191,36,0.15)"
+                  : "transparent",
+                borderRadius: 2,
+                padding: "0 1px",
+                transition: "background 0.15s",
+              }}
+            >
+              {token}
+            </span>
+          );
+        }
+        if (isHighlighted && clean) {
+          return (
+            <mark
+              key={i}
+              style={{
+                background: "#fde68a",
+                color: "#1c1403",
+                borderRadius: 2,
+                padding: "0 2px",
+              }}
+            >
+              {token}
+            </mark>
+          );
+        }
+        return <span key={i}>{token}</span>;
+      })}
+    </span>
+  );
+}
+// ────────────────────────────────────────────────────────────────
+
 function VocabCard({ item, active, T, isDark, onHighlight }) {
   const [speaking, setSpeaking] = useState(false);
   const tc = TYPE_COLORS[isDark ? "dark" : "light"];
@@ -306,7 +536,7 @@ function VocabCard({ item, active, T, isDark, onHighlight }) {
         border: `1px solid ${active ? T.accentBorder : T.border}`,
         borderLeft: `3px solid ${active ? T.accent : c.accent}`,
         borderRadius: "0 10px 10px 0",
-        padding: "14px 16px",
+        padding: "16px 18px",
         cursor: "pointer",
         transition: "all 0.15s",
       }}
@@ -324,19 +554,24 @@ function VocabCard({ item, active, T, isDark, onHighlight }) {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-start",
-          marginBottom: 6,
+          marginBottom: 8,
           gap: 8,
         }}
       >
         <div
-          style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            minWidth: 0,
+          }}
         >
           <span
             style={{
-              fontSize: 15,
+              fontSize: 17,
               color: T.text,
-              fontWeight: 600,
-              fontFamily: "'Fraunces', serif",
+              fontWeight: 700,
+              fontFamily: "'Inter', sans-serif",
             }}
           >
             {item.word}
@@ -347,8 +582,8 @@ function VocabCard({ item, active, T, isDark, onHighlight }) {
               background: speaking ? T.accentBg : T.speakBg,
               border: "none",
               borderRadius: "50%",
-              width: 26,
-              height: 26,
+              width: 30,
+              height: 30,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -356,7 +591,7 @@ function VocabCard({ item, active, T, isDark, onHighlight }) {
               flexShrink: 0,
               transition: "all 0.12s",
               color: T.speakText,
-              fontSize: 12,
+              fontSize: 14,
               transform: speaking ? "scale(1.2)" : "scale(1)",
             }}
           >
@@ -365,18 +600,17 @@ function VocabCard({ item, active, T, isDark, onHighlight }) {
         </div>
         <span
           style={{
-            fontSize: 9,
+            fontSize: 10,
             letterSpacing: "0.12em",
             textTransform: "uppercase",
             color: c.accent,
             border: `1px solid ${c.border}`,
             background: c.bg,
             borderRadius: 4,
-            padding: "2px 8px",
+            padding: "3px 10px",
             whiteSpace: "nowrap",
             flexShrink: 0,
-            fontFamily: "'Outfit', sans-serif",
-            fontWeight: 600,
+            fontWeight: 700,
           }}
         >
           {item.type}
@@ -385,9 +619,9 @@ function VocabCard({ item, active, T, isDark, onHighlight }) {
       {item.ipa && (
         <div
           style={{
-            fontSize: 12,
+            fontSize: 14,
             color: T.ipaColor,
-            marginBottom: 6,
+            marginBottom: 8,
             fontFamily: "monospace",
             letterSpacing: "0.06em",
           }}
@@ -397,9 +631,9 @@ function VocabCard({ item, active, T, isDark, onHighlight }) {
       )}
       <div
         style={{
-          fontSize: 13,
+          fontSize: 15,
           color: T.textMuted,
-          marginBottom: 4,
+          marginBottom: 6,
           lineHeight: 1.55,
         }}
       >
@@ -407,7 +641,7 @@ function VocabCard({ item, active, T, isDark, onHighlight }) {
       </div>
       <div
         style={{
-          fontSize: 12,
+          fontSize: 14,
           color: T.textFaint,
           fontStyle: "italic",
           lineHeight: 1.4,
@@ -435,7 +669,7 @@ function QuestionCard({
       style={{
         background: T.surface,
         borderTop: `1px solid ${T.border}`,
-        padding: "16px 0",
+        padding: "18px 0",
       }}
     >
       <div
@@ -443,17 +677,16 @@ function QuestionCard({
           display: "flex",
           gap: 14,
           alignItems: "flex-start",
-          marginBottom: 10,
+          marginBottom: 12,
         }}
       >
         <span
           style={{
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: 700,
             color: isComp ? T.accentText : T.idiomText,
-            fontFamily: "'Outfit', sans-serif",
             letterSpacing: "0.05em",
-            minWidth: 22,
+            minWidth: 24,
             paddingTop: 2,
           }}
         >
@@ -462,18 +695,17 @@ function QuestionCard({
         <div style={{ flex: 1 }}>
           <div
             style={{
-              fontSize: "clamp(13px, 2.3vw, 15px)",
+              fontSize: 17,
               color: T.text,
               lineHeight: 1.65,
-              marginBottom: 4,
-              fontFamily: "'Outfit', sans-serif",
+              marginBottom: 6,
             }}
           >
             {q.question}
           </div>
           {q.hint && (
             <div
-              style={{ fontSize: 11, color: T.textFaint, fontStyle: "italic" }}
+              style={{ fontSize: 13, color: T.textFaint, fontStyle: "italic" }}
             >
               ↳ {q.hint}
             </div>
@@ -483,11 +715,11 @@ function QuestionCard({
       {isSubmitted ? (
         <div
           style={{
-            marginLeft: 36,
+            marginLeft: 38,
             background: T.successBg,
             borderLeft: `2px solid ${T.successText}`,
-            padding: "9px 14px",
-            fontSize: 13,
+            padding: "10px 16px",
+            fontSize: 15,
             color: T.successText,
             lineHeight: 1.5,
             borderRadius: "0 6px 6px 0",
@@ -496,7 +728,7 @@ function QuestionCard({
           {answer}
         </div>
       ) : (
-        <div style={{ display: "flex", gap: 8, marginLeft: 36 }}>
+        <div style={{ display: "flex", gap: 8, marginLeft: 38 }}>
           <textarea
             value={answer || ""}
             onChange={(e) => setAnswer(e.target.value)}
@@ -507,13 +739,12 @@ function QuestionCard({
               background: T.inputBg,
               border: `1px solid ${T.inputBorder}`,
               borderRadius: 8,
-              padding: "10px 13px",
+              padding: "12px 14px",
               color: T.text,
-              fontSize: 13,
+              fontSize: 16,
               resize: "vertical",
               outline: "none",
               transition: "border-color 0.15s",
-              fontFamily: "'Outfit', sans-serif",
               lineHeight: 1.5,
             }}
             onFocus={(e) => (e.target.style.borderColor = T.accentBorder)}
@@ -525,16 +756,16 @@ function QuestionCard({
               background: answer?.trim() ? T.accent : "transparent",
               border: `1px solid ${answer?.trim() ? T.accent : T.border}`,
               borderRadius: 8,
-              padding: "0 14px",
+              padding: "0 16px",
               color: answer?.trim()
                 ? isDark
                   ? "#1c1814"
                   : "#fff"
                 : T.textFaint,
               cursor: answer?.trim() ? "pointer" : "default",
-              fontSize: 15,
+              fontSize: 18,
               alignSelf: "flex-end",
-              height: 40,
+              height: 44,
               transition: "all 0.15s",
               flexShrink: 0,
               fontWeight: 700,
@@ -570,18 +801,15 @@ export default function WordAndWorld() {
   const [appear, setAppear] = useState(() => !!getSharedContent());
   const [regenCount, setRegenCount] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [tooltipWord, setTooltipWord] = useState(null); // ← tooltip state
 
-  // ── custom topic state ──────────────────────────────────────────
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customTopicInput, setCustomTopicInput] = useState("");
   const [activeTopic, setActiveTopic] = useState(() => {
-    // if shared lesson, show its topic name
     const shared = getSharedContent();
     return shared?._topic || null;
   });
   const customTopicRef = useRef(null);
-  // ───────────────────────────────────────────────────────────────
-
   const isSharedLesson = !!new URLSearchParams(window.location.search).get("c");
 
   useEffect(() => {
@@ -589,6 +817,25 @@ export default function WordAndWorld() {
     load();
     window.speechSynthesis.onvoiceschanged = load;
   }, []);
+
+  // close tooltip on outside tap
+  useEffect(() => {
+    if (!tooltipWord) return;
+    const handler = (e) => {
+      if (
+        !e.target.closest("[data-tooltip-root]") &&
+        !e.target.closest("[data-vocab-word]")
+      ) {
+        setTooltipWord(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("touchstart", handler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("touchstart", handler);
+    };
+  }, [tooltipWord]);
 
   const T = THEMES[isDark ? "dark" : "light"];
   const LVL = LEVELS[level];
@@ -607,11 +854,10 @@ export default function WordAndWorld() {
     setSubmitted({});
     setHighlighted(null);
     setTab("story");
-
+    setTooltipWord(null);
     const topicToUse =
       customTopicRef.current || activeTopic || TOPICS[topicIndex];
     customTopicRef.current = null;
-
     try {
       const cacheKey = `ww_${level}_${DAILY_SEED}_${topicToUse}`;
       const cached = sessionStorage.getItem(cacheKey);
@@ -662,8 +908,7 @@ export default function WordAndWorld() {
 
   const regenerate = () => {
     window.history.replaceState(null, "", window.location.pathname);
-    const newIdx = Math.floor(Math.random() * TOPICS.length);
-    setTopicIndex(newIdx);
+    setTopicIndex(Math.floor(Math.random() * TOPICS.length));
     setActiveTopic(null);
     setRegenCount((c) => c + 1);
   };
@@ -702,28 +947,6 @@ export default function WordAndWorld() {
     });
   };
 
-  const renderHighlighted = (text) => {
-    if (!highlighted || !text) return text;
-    const esc = highlighted.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return text.split(new RegExp(`(${esc})`, "gi")).map((p, i) =>
-      p.toLowerCase() === highlighted.toLowerCase() ? (
-        <mark
-          key={i}
-          style={{
-            background: "#fde68a",
-            color: "#1c1403",
-            borderRadius: 2,
-            padding: "0 2px",
-          }}
-        >
-          {p}
-        </mark>
-      ) : (
-        p
-      )
-    );
-  };
-
   const dateStr = today.toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -744,12 +967,11 @@ export default function WordAndWorld() {
         background: opts.active ? T.accentBg : "transparent",
         border: `1px solid ${opts.active ? T.accentBorder : T.border}`,
         borderRadius: 8,
-        height: 36,
-        padding: "0 12px",
+        height: 40,
+        padding: "0 14px",
         cursor: "pointer",
-        fontSize: 13,
+        fontSize: 14,
         color: opts.active ? T.accentText : T.textMuted,
-        fontFamily: "'Outfit', sans-serif",
         fontWeight: 600,
         display: "flex",
         alignItems: "center",
@@ -765,7 +987,7 @@ export default function WordAndWorld() {
   return (
     <>
       <link
-        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,700;1,9..144,400&family=Outfit:wght@300;400;500;600&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&display=swap"
         rel="stylesheet"
       />
 
@@ -773,7 +995,7 @@ export default function WordAndWorld() {
         style={{
           minHeight: "100vh",
           background: T.bg,
-          fontFamily: "'Outfit', sans-serif",
+          fontFamily: "'Inter', sans-serif",
           color: T.text,
           transition: "background 0.3s, color 0.25s",
         }}
@@ -785,1077 +1007,1085 @@ export default function WordAndWorld() {
           }}
         />
 
-        <div
-          style={{
-            maxWidth: 780,
-            margin: "0 auto",
-            padding: "clamp(24px,5vw,48px) clamp(20px,4vw,28px) 120px",
-          }}
-        >
-          {/* HEADER */}
-          <header style={{ marginBottom: 40 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                flexWrap: "wrap",
-                gap: 16,
-                marginBottom: 28,
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontSize: 10,
-                    letterSpacing: "0.4em",
-                    textTransform: "uppercase",
-                    color: T.textFaint,
-                    marginBottom: 10,
-                    fontWeight: 500,
-                  }}
-                >
-                  Daily English
-                </div>
-                <h1
-                  style={{
-                    margin: 0,
-                    fontFamily: "'Fraunces', serif",
-                    fontSize: "clamp(32px, 7vw, 52px)",
-                    fontWeight: 700,
-                    letterSpacing: "-0.03em",
-                    lineHeight: 0.95,
-                    color: T.text,
-                  }}
-                >
-                  Word{" "}
-                  <span style={{ fontStyle: "italic", color: T.accent }}>
-                    &
-                  </span>{" "}
-                  World
-                </h1>
-              </div>
-
-              {/* Controls */}
+        {/* no max-width on outer, padding only horizontal */}
+        <div style={{ padding: "clamp(20px,4vw,40px) 0 120px" }}>
+          <div
+            style={{
+              maxWidth: 860,
+              margin: "0 auto",
+              padding: "0 clamp(12px, 3vw, 24px)",
+            }}
+          >
+            {/* HEADER */}
+            <header style={{ marginBottom: 36 }}>
               <div
                 style={{
                   display: "flex",
-                  gap: 8,
-                  alignItems: "center",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
                   flexWrap: "wrap",
+                  gap: 14,
+                  marginBottom: 24,
                 }}
               >
-                {iconBtn(
-                  () => setIsDark((d) => !d),
-                  isDark ? "☀ Light" : "☾ Dark"
-                )}
-                {iconBtn(shareLink, copied ? "✓ Copied" : "↗ Share", {
-                  active: copied,
-                  style: {
-                    opacity: content ? 1 : 0.4,
-                    pointerEvents: content ? "auto" : "none",
-                  },
-                })}
-
-                {/* ── custom topic input or buttons ── */}
-                {showCustomInput ? (
-                  <form
-                    onSubmit={handleCustomTopicSubmit}
-                    style={{ display: "flex", gap: 6, alignItems: "center" }}
+                <div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: "0.35em",
+                      textTransform: "uppercase",
+                      color: T.textFaint,
+                      marginBottom: 8,
+                      fontWeight: 600,
+                    }}
                   >
-                    <input
-                      autoFocus
-                      value={customTopicInput}
-                      onChange={(e) => setCustomTopicInput(e.target.value)}
-                      placeholder="e.g. Hiking in Norway…"
-                      style={{
-                        background: T.inputBg,
-                        border: `1px solid ${T.accentBorder}`,
-                        borderRadius: 8,
-                        height: 36,
-                        padding: "0 12px",
-                        color: T.text,
-                        fontSize: 13,
-                        outline: "none",
-                        fontFamily: "'Outfit', sans-serif",
-                        width: "clamp(140px, 20vw, 200px)",
-                        transition: "border-color 0.15s",
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = T.accent)}
-                      onBlur={(e) =>
-                        (e.target.style.borderColor = T.accentBorder)
-                      }
-                    />
-                    <button
-                      type="submit"
-                      disabled={!customTopicInput.trim()}
-                      style={{
-                        background: customTopicInput.trim()
-                          ? T.accent
-                          : T.surfaceEl,
-                        border: "none",
-                        borderRadius: 8,
-                        height: 36,
-                        padding: "0 14px",
-                        color: customTopicInput.trim()
-                          ? isDark
-                            ? "#1c1814"
-                            : "#fff"
-                          : T.textFaint,
-                        cursor: customTopicInput.trim() ? "pointer" : "default",
-                        fontSize: 13,
-                        fontWeight: 600,
-                        transition: "all 0.15s",
-                      }}
+                    Daily English
+                  </div>
+                  <h1
+                    style={{
+                      margin: 0,
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: "clamp(28px, 6vw, 48px)",
+                      fontWeight: 800,
+                      letterSpacing: "-0.04em",
+                      lineHeight: 0.95,
+                      color: T.text,
+                    }}
+                  >
+                    Word{" "}
+                    <span style={{ color: T.accent, fontStyle: "italic" }}>
+                      &
+                    </span>{" "}
+                    World
+                  </h1>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {iconBtn(
+                    () => setIsDark((d) => !d),
+                    isDark ? "☀ Light" : "☾ Dark"
+                  )}
+                  {iconBtn(shareLink, copied ? "✓ Copied" : "↗ Share", {
+                    active: copied,
+                    style: {
+                      opacity: content ? 1 : 0.4,
+                      pointerEvents: content ? "auto" : "none",
+                    },
+                  })}
+                  {showCustomInput ? (
+                    <form
+                      onSubmit={handleCustomTopicSubmit}
+                      style={{ display: "flex", gap: 6, alignItems: "center" }}
                     >
-                      Go
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowCustomInput(false);
-                        setCustomTopicInput("");
-                      }}
-                      style={{
-                        background: "transparent",
-                        border: `1px solid ${T.border}`,
-                        borderRadius: 8,
-                        height: 36,
-                        width: 36,
-                        cursor: "pointer",
-                        color: T.textMuted,
-                        fontSize: 16,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </form>
-                ) : (
-                  <div style={{ display: "flex", gap: 6 }}>
-                    {iconBtn(() => setShowCustomInput(true), "✎ Own topic")}
-                    <button
-                      onClick={regenerate}
-                      disabled={loading}
-                      style={{
-                        background: T.accent,
-                        border: "none",
-                        borderRadius: 8,
-                        height: 36,
-                        padding: "0 16px",
-                        cursor: loading ? "not-allowed" : "pointer",
-                        fontSize: 13,
-                        color: isDark ? "#1c1814" : "#fff",
-                        fontFamily: "'Outfit', sans-serif",
-                        fontWeight: 600,
-                        opacity: loading ? 0.6 : 1,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        transition: "opacity 0.15s",
-                      }}
-                    >
-                      <span
+                      <input
+                        autoFocus
+                        value={customTopicInput}
+                        onChange={(e) => setCustomTopicInput(e.target.value)}
+                        placeholder="e.g. Hiking in Norway…"
                         style={{
-                          display: "inline-block",
-                          animation: loading
-                            ? "spin 1s linear infinite"
-                            : "none",
+                          background: T.inputBg,
+                          border: `1px solid ${T.accentBorder}`,
+                          borderRadius: 8,
+                          height: 40,
+                          padding: "0 14px",
+                          color: T.text,
+                          fontSize: 15,
+                          outline: "none",
+                          width: "clamp(150px, 22vw, 220px)",
+                        }}
+                      />
+                      <button
+                        type="submit"
+                        disabled={!customTopicInput.trim()}
+                        style={{
+                          background: customTopicInput.trim()
+                            ? T.accent
+                            : T.surfaceEl,
+                          border: "none",
+                          borderRadius: 8,
+                          height: 40,
+                          padding: "0 16px",
+                          color: customTopicInput.trim()
+                            ? isDark
+                              ? "#1c1814"
+                              : "#fff"
+                            : T.textFaint,
+                          cursor: customTopicInput.trim()
+                            ? "pointer"
+                            : "default",
+                          fontSize: 14,
+                          fontWeight: 600,
                         }}
                       >
-                        ↻
-                      </span>
-                      New topic
-                    </button>
-                  </div>
-                )}
+                        Go
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowCustomInput(false);
+                          setCustomTopicInput("");
+                        }}
+                        style={{
+                          background: "transparent",
+                          border: `1px solid ${T.border}`,
+                          borderRadius: 8,
+                          height: 40,
+                          width: 40,
+                          cursor: "pointer",
+                          color: T.textMuted,
+                          fontSize: 18,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </form>
+                  ) : (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {iconBtn(() => setShowCustomInput(true), "✎ Own topic")}
+                      <button
+                        onClick={regenerate}
+                        disabled={loading}
+                        style={{
+                          background: T.accent,
+                          border: "none",
+                          borderRadius: 8,
+                          height: 40,
+                          padding: "0 18px",
+                          cursor: loading ? "not-allowed" : "pointer",
+                          fontSize: 14,
+                          color: isDark ? "#1c1814" : "#fff",
+                          fontWeight: 700,
+                          opacity: loading ? 0.6 : 1,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: "inline-block",
+                            animation: loading
+                              ? "spin 1s linear infinite"
+                              : "none",
+                          }}
+                        >
+                          ↻
+                        </span>
+                        New topic
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Shared banner */}
-            {isSharedLesson && (
+              {isSharedLesson && (
+                <div
+                  style={{
+                    background: T.successBg,
+                    borderLeft: `3px solid ${T.successText}`,
+                    borderRadius: "0 8px 8px 0",
+                    padding: "12px 18px",
+                    marginBottom: 20,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 14,
+                      color: T.successText,
+                      fontWeight: 700,
+                      marginBottom: 2,
+                    }}
+                  >
+                    Shared lesson
+                  </div>
+                  <div style={{ fontSize: 13, color: T.textFaint }}>
+                    You and your partner are reading the exact same story and
+                    questions.
+                  </div>
+                </div>
+              )}
+
+              {/* Level switcher */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+                {Object.values(LEVELS).map((lvl) => {
+                  const active = level === lvl.id;
+                  const lc = isDark ? lvl.colorDark : lvl.color;
+                  const lb = isDark ? lvl.colorBgDark : lvl.colorBg;
+                  const lborder = isDark
+                    ? lvl.colorBorderDark
+                    : lvl.colorBorder;
+                  return (
+                    <button
+                      key={lvl.id}
+                      onClick={() => switchLevel(lvl.id)}
+                      style={{
+                        flex: "1 1 160px",
+                        border: `1px solid ${active ? lborder : T.border}`,
+                        borderTop: active
+                          ? `3px solid ${lc}`
+                          : `3px solid transparent`,
+                        borderRadius: 8,
+                        padding: "14px 18px",
+                        cursor: "pointer",
+                        background: active ? lb : T.surface,
+                        transition: "all 0.18s",
+                        textAlign: "left",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "baseline",
+                          gap: 8,
+                          marginBottom: 4,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 18,
+                            fontWeight: 800,
+                            color: active ? lc : T.textMuted,
+                          }}
+                        >
+                          {lvl.label}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: active ? lc : T.textFaint,
+                            fontWeight: 500,
+                          }}
+                        >
+                          {lvl.fullLabel}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: active ? lc : T.textFaint,
+                          opacity: 0.85,
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {lvl.description}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
               <div
                 style={{
-                  background: T.successBg,
-                  borderLeft: `3px solid ${T.successText}`,
-                  borderRadius: "0 8px 8px 0",
-                  padding: "10px 16px",
-                  marginBottom: 20,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 12,
+                  alignItems: "center",
                 }}
               >
                 <div
                   style={{
-                    fontSize: 13,
-                    color: T.successText,
-                    fontWeight: 600,
-                    marginBottom: 2,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "8px 18px",
+                    background: T.surfaceEl,
+                    border: `1px solid ${T.border}`,
+                    borderRadius: 6,
                   }}
                 >
-                  Shared lesson
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: lvlColor,
+                      display: "inline-block",
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: T.textFaint,
+                      letterSpacing: "0.15em",
+                      textTransform: "uppercase",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Topic
+                  </span>
+                  <span
+                    style={{ fontSize: 15, color: T.text, fontWeight: 600 }}
+                  >
+                    {displayTopic}
+                  </span>
+                  {activeTopic && !isSharedLesson && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase",
+                        background: T.accentBg,
+                        color: T.accentText,
+                        border: `1px solid ${T.accentBorder}`,
+                        borderRadius: 4,
+                        padding: "2px 8px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      custom
+                    </span>
+                  )}
                 </div>
-                <div style={{ fontSize: 12, color: T.textFaint }}>
-                  You and your partner are reading the exact same story and
-                  questions.
+                <span style={{ fontSize: 13, color: T.textFaint }}>
+                  {dateStr}
+                </span>
+              </div>
+            </header>
+
+            {/* LOADING */}
+            {loading && (
+              <div style={{ textAlign: "center", padding: "100px 0" }}>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 20,
+                  }}
+                >
+                  <div style={{ position: "relative", width: 48, height: 48 }}>
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        border: `1.5px solid ${T.border}`,
+                        borderRadius: "50%",
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        border: "1.5px solid transparent",
+                        borderTopColor: T.accent,
+                        borderRadius: "50%",
+                        animation: "spin 0.9s linear infinite",
+                      }}
+                    />
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 15,
+                      color: T.textFaint,
+                      fontStyle: "italic",
+                    }}
+                  >
+                    Crafting your {LVL.label} lesson…
+                  </span>
                 </div>
               </div>
             )}
 
-            {/* Level switcher */}
-            <div style={{ display: "flex", gap: 6, marginBottom: 22 }}>
-              {Object.values(LEVELS).map((lvl) => {
-                const active = level === lvl.id;
-                const lc = isDark ? lvl.colorDark : lvl.color;
-                const lb = isDark ? lvl.colorBgDark : lvl.colorBg;
-                const lborder = isDark ? lvl.colorBorderDark : lvl.colorBorder;
-                return (
-                  <button
-                    key={lvl.id}
-                    onClick={() => switchLevel(lvl.id)}
+            {/* ERROR */}
+            {error && (
+              <div
+                style={{
+                  background: "rgba(239,68,68,0.06)",
+                  borderLeft: "3px solid #ef4444",
+                  borderRadius: "0 8px 8px 0",
+                  padding: "18px 22px",
+                  marginBottom: 20,
+                }}
+              >
+                <div
+                  style={{ color: "#fca5a5", fontSize: 15, marginBottom: 12 }}
+                >
+                  {error}
+                </div>
+                <button
+                  onClick={fetchContent}
+                  style={{
+                    background: "transparent",
+                    border: `1px solid ${T.accentBorder}`,
+                    borderRadius: 6,
+                    padding: "8px 20px",
+                    color: T.accentText,
+                    cursor: "pointer",
+                    fontSize: 14,
+                    fontWeight: 600,
+                  }}
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {/* CONTENT */}
+            {content && !loading && (
+              <div
+                style={{
+                  opacity: appear ? 1 : 0,
+                  transform: appear ? "none" : "translateY(8px)",
+                  transition: "opacity 0.4s ease, transform 0.4s ease",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    marginBottom: 20,
+                    paddingBottom: 16,
+                    borderBottom: `1px solid ${T.border}`,
+                  }}
+                >
+                  <span
                     style={{
-                      flex: "1 1 160px",
-                      border: `1px solid ${active ? lborder : T.border}`,
-                      borderTop: active
-                        ? `3px solid ${lc}`
-                        : `3px solid transparent`,
-                      borderRadius: 8,
-                      padding: "12px 16px",
-                      cursor: "pointer",
-                      background: active ? lb : T.surface,
-                      transition: "all 0.18s",
-                      textAlign: "left",
+                      fontSize: 13,
+                      color: lvlColor,
+                      fontWeight: 700,
+                      background: lvlBg,
+                      border: `1px solid ${lvlBorder}`,
+                      borderRadius: 4,
+                      padding: "3px 12px",
                     }}
                   >
+                    {LVL.fullLabel}
+                  </span>
+                  <span style={{ fontSize: 13, color: T.textFaint }}>
+                    {LVL.description}
+                  </span>
+                </div>
+
+                {/* Tabs */}
+                <div
+                  style={{
+                    display: "flex",
+                    marginBottom: 28,
+                    borderBottom: `1px solid ${T.border}`,
+                  }}
+                >
+                  {[
+                    ["story", "Story"],
+                    ["vocabulary", "Words"],
+                    ["questions", "Questions"],
+                  ].map(([t, label]) => (
+                    <button
+                      key={t}
+                      onClick={() => setTab(t)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: "12px 22px",
+                        fontSize: 16,
+                        fontWeight: tab === t ? 700 : 400,
+                        color: tab === t ? T.accentText : T.tabText,
+                        borderBottom: `2px solid ${
+                          tab === t ? T.accent : "transparent"
+                        }`,
+                        marginBottom: -1,
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* STORY */}
+                {tab === "story" && (
+                  <div style={{ animation: "fadeUp 0.3s ease" }}>
+                    <div
+                      style={{
+                        background: lvlBg,
+                        borderLeft: `3px solid ${lvlColor}`,
+                        borderRadius: "0 6px 6px 0",
+                        padding: "12px 18px",
+                        marginBottom: 24,
+                        fontSize: 14,
+                        color: lvlColor,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {level === "b1"
+                        ? "Read carefully. Tap any underlined word to see its meaning and hear pronunciation."
+                        : "Notice how ideas connect between sentences. Tap underlined words to look them up."}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: "clamp(17px, 2.8vw, 20px)",
+                        lineHeight: 2.1,
+                        color: T.storyText,
+                        marginBottom: 32,
+                        fontWeight: 400,
+                        letterSpacing: "0.01em",
+                      }}
+                    >
+                      <ClickableStory
+                        text={content.story}
+                        vocabulary={content.vocabulary}
+                        highlighted={highlighted}
+                        T={T}
+                        onWordClick={(vocabItem) => {
+                          setTooltipWord(vocabItem);
+                          speakWord(vocabItem.word);
+                        }}
+                      />
+                    </div>
+
+                    {content.idioms?.length > 0 && (
+                      <div style={{ marginBottom: 32 }}>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            letterSpacing: "0.3em",
+                            textTransform: "uppercase",
+                            color: T.textFaint,
+                            marginBottom: 14,
+                            fontWeight: 600,
+                          }}
+                        >
+                          Idioms in this story
+                        </div>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns:
+                              "repeat(auto-fill, minmax(min(100%, 280px), 1fr))",
+                            gap: 10,
+                          }}
+                        >
+                          {content.idioms.map((id, i) => (
+                            <div
+                              key={i}
+                              style={{
+                                background: T.idiomBg,
+                                borderLeft: `2px solid ${T.idiomText}`,
+                                borderRadius: "0 8px 8px 0",
+                                padding: "12px 16px",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: 16,
+                                  color: T.idiomText,
+                                  fontStyle: "italic",
+                                  marginBottom: 4,
+                                  fontWeight: 500,
+                                }}
+                              >
+                                "{id.idiom}"
+                              </div>
+                              <div
+                                style={{ fontSize: 14, color: T.idiomMuted }}
+                              >
+                                {id.meaning}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div
                       style={{
                         display: "flex",
-                        alignItems: "baseline",
-                        gap: 8,
-                        marginBottom: 3,
+                        gap: 10,
+                        paddingTop: 16,
+                        borderTop: `1px solid ${T.border}`,
                       }}
                     >
-                      <span
+                      <button
+                        onClick={() => setTab("vocabulary")}
                         style={{
-                          fontSize: 17,
-                          fontWeight: 700,
-                          color: active ? lc : T.textMuted,
-                          fontFamily: "'Fraunces', serif",
-                        }}
-                      >
-                        {lvl.label}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          color: active ? lc : T.textFaint,
+                          background: "transparent",
+                          border: `1px solid ${T.border}`,
+                          borderRadius: 8,
+                          padding: "12px 24px",
+                          color: T.textMuted,
+                          cursor: "pointer",
+                          fontSize: 15,
                           fontWeight: 500,
                         }}
                       >
-                        {lvl.fullLabel}
+                        Study words →
+                      </button>
+                      <button
+                        onClick={() => setTab("questions")}
+                        style={{
+                          background: T.accent,
+                          border: "none",
+                          borderRadius: 8,
+                          padding: "12px 24px",
+                          color: isDark ? "#1c1814" : "#fff",
+                          cursor: "pointer",
+                          fontSize: 15,
+                          fontWeight: 700,
+                        }}
+                      >
+                        Answer questions →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* VOCABULARY */}
+                {tab === "vocabulary" && (
+                  <div style={{ animation: "fadeUp 0.3s ease" }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: T.textFaint,
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase",
+                        marginBottom: 18,
+                        fontWeight: 600,
+                      }}
+                    >
+                      🔈 Tap speaker to hear · tap card to highlight in story ·{" "}
+                      {content.vocabulary?.length} words
+                    </div>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
+                        gap: 12,
+                        marginBottom: 36,
+                      }}
+                    >
+                      {content.vocabulary?.map((item, i) => (
+                        <VocabCard
+                          key={i}
+                          item={item}
+                          T={T}
+                          isDark={isDark}
+                          active={highlighted === item.word}
+                          onHighlight={(word) => {
+                            setHighlighted(highlighted === word ? null : word);
+                            if (highlighted !== word) setTab("story");
+                          }}
+                        />
+                      ))}
+                    </div>
+
+                    {content.idioms?.length > 0 && (
+                      <div style={{ marginBottom: 32 }}>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            letterSpacing: "0.3em",
+                            textTransform: "uppercase",
+                            color: T.textFaint,
+                            marginBottom: 14,
+                            fontWeight: 600,
+                          }}
+                        >
+                          Idioms & Fixed Phrases
+                        </div>
+                        <div style={{ display: "grid", gap: 10 }}>
+                          {content.idioms.map((item, i) => (
+                            <div
+                              key={i}
+                              style={{
+                                background: T.idiomBg,
+                                borderLeft: `2px solid ${T.idiomText}`,
+                                borderRadius: "0 8px 8px 0",
+                                padding: "14px 18px",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 10,
+                                  marginBottom: 6,
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: 16,
+                                    color: T.idiomText,
+                                    fontStyle: "italic",
+                                    fontWeight: 500,
+                                  }}
+                                >
+                                  "{item.idiom}"
+                                </span>
+                                <button
+                                  onClick={() => speakWord(item.idiom)}
+                                  style={{
+                                    background: T.speakBg,
+                                    border: "none",
+                                    borderRadius: "50%",
+                                    width: 28,
+                                    height: 28,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    cursor: "pointer",
+                                    fontSize: 13,
+                                    color: T.speakText,
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  🔈
+                                </button>
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: 15,
+                                  color: T.textMuted,
+                                  marginBottom: item.used_in ? 4 : 0,
+                                }}
+                              >
+                                {item.meaning}
+                              </div>
+                              {item.used_in && (
+                                <div
+                                  style={{
+                                    fontSize: 13,
+                                    color: T.textFaint,
+                                    fontStyle: "italic",
+                                  }}
+                                >
+                                  "{item.used_in}"
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        paddingTop: 16,
+                        borderTop: `1px solid ${T.border}`,
+                      }}
+                    >
+                      <button
+                        onClick={() => setTab("questions")}
+                        style={{
+                          background: T.accent,
+                          border: "none",
+                          borderRadius: 8,
+                          padding: "12px 24px",
+                          color: isDark ? "#1c1814" : "#fff",
+                          cursor: "pointer",
+                          fontSize: 15,
+                          fontWeight: 700,
+                        }}
+                      >
+                        Answer questions →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* QUESTIONS */}
+                {tab === "questions" && (
+                  <div style={{ animation: "fadeUp 0.3s ease" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: 10,
+                      }}
+                    >
+                      <span style={{ fontSize: 14, color: T.textFaint }}>
+                        Progress
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 15,
+                          color: T.accentText,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {answeredCount} / {totalQ}
                       </span>
                     </div>
                     <div
                       style={{
-                        fontSize: 11,
-                        color: active ? lc : T.textFaint,
-                        opacity: 0.85,
-                        lineHeight: 1.4,
+                        height: 4,
+                        background: T.border,
+                        borderRadius: 2,
+                        marginBottom: 32,
+                        overflow: "hidden",
                       }}
                     >
-                      {lvl.description}
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${(answeredCount / (totalQ || 1)) * 100}%`,
+                          background: T.accent,
+                          borderRadius: 2,
+                          transition: "width 0.4s ease",
+                        }}
+                      />
                     </div>
-                  </button>
-                );
-              })}
-            </div>
 
-            {/* Topic + date row */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 12,
-                alignItems: "center",
-              }}
-            >
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "7px 16px",
-                  background: T.surfaceEl,
-                  border: `1px solid ${T.border}`,
-                  borderRadius: 6,
-                }}
-              >
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: "50%",
-                    background: lvlColor,
-                    display: "inline-block",
-                    flexShrink: 0,
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: 10,
-                    color: T.textFaint,
-                    letterSpacing: "0.15em",
-                    textTransform: "uppercase",
-                    fontWeight: 600,
-                  }}
-                >
-                  Topic
-                </span>
-                <span
-                  style={{
-                    fontSize: 14,
-                    color: T.text,
-                    fontFamily: "'Fraunces', serif",
-                    fontStyle: "italic",
-                  }}
-                >
-                  {displayTopic}
-                </span>
-                {/* badge if custom */}
-                {activeTopic && !isSharedLesson && (
-                  <span
-                    style={{
-                      fontSize: 9,
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase",
-                      background: T.accentBg,
-                      color: T.accentText,
-                      border: `1px solid ${T.accentBorder}`,
-                      borderRadius: 4,
-                      padding: "1px 7px",
-                      fontWeight: 700,
-                    }}
-                  >
-                    custom
-                  </span>
+                    <div style={{ marginBottom: 32 }}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          letterSpacing: "0.3em",
+                          textTransform: "uppercase",
+                          color: T.accentText,
+                          marginBottom: 4,
+                          fontWeight: 700,
+                        }}
+                      >
+                        Comprehension
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: T.textFaint,
+                          marginBottom: 16,
+                        }}
+                      >
+                        Based on the story
+                      </div>
+                      {content.questions?.map((q, i) =>
+                        q.type === "comprehension" ? (
+                          <QuestionCard
+                            key={i}
+                            q={q}
+                            i={i}
+                            T={T}
+                            isDark={isDark}
+                            answer={answers[i]}
+                            setAnswer={(v) =>
+                              setAnswers((a) => ({ ...a, [i]: v }))
+                            }
+                            isSubmitted={!!submitted[i]}
+                            onSubmit={() => {
+                              if (answers[i]?.trim())
+                                setSubmitted((s) => ({ ...s, [i]: true }));
+                            }}
+                          />
+                        ) : null
+                      )}
+                    </div>
+
+                    <div style={{ marginBottom: 32 }}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          letterSpacing: "0.3em",
+                          textTransform: "uppercase",
+                          color: T.idiomText,
+                          marginBottom: 4,
+                          fontWeight: 700,
+                        }}
+                      >
+                        Discussion
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: T.textFaint,
+                          marginBottom: 16,
+                        }}
+                      >
+                        Your thoughts & experience
+                      </div>
+                      {content.questions?.map((q, i) =>
+                        q.type === "discussion" ? (
+                          <QuestionCard
+                            key={i}
+                            q={q}
+                            i={i}
+                            T={T}
+                            isDark={isDark}
+                            answer={answers[i]}
+                            setAnswer={(v) =>
+                              setAnswers((a) => ({ ...a, [i]: v }))
+                            }
+                            isSubmitted={!!submitted[i]}
+                            onSubmit={() => {
+                              if (answers[i]?.trim())
+                                setSubmitted((s) => ({ ...s, [i]: true }));
+                            }}
+                          />
+                        ) : null
+                      )}
+                    </div>
+
+                    {allDone && (
+                      <div
+                        style={{
+                          textAlign: "center",
+                          background: lvlBg,
+                          border: `1px solid ${lvlBorder}`,
+                          borderRadius: 12,
+                          padding: "40px 24px",
+                          marginTop: 16,
+                        }}
+                      >
+                        <div style={{ fontSize: 48, marginBottom: 14 }}>🎓</div>
+                        <div
+                          style={{
+                            fontSize: 28,
+                            color: lvlColor,
+                            marginBottom: 8,
+                            fontWeight: 800,
+                          }}
+                        >
+                          Lesson complete
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 16,
+                            color: T.textFaint,
+                            marginBottom: 28,
+                          }}
+                        >
+                          All 15 questions answered. Well done.
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 10,
+                            justifyContent: "center",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <button
+                            onClick={regenerate}
+                            style={{
+                              background: T.accent,
+                              border: "none",
+                              borderRadius: 8,
+                              padding: "12px 24px",
+                              color: isDark ? "#1c1814" : "#fff",
+                              cursor: "pointer",
+                              fontSize: 15,
+                              fontWeight: 700,
+                            }}
+                          >
+                            ↻ New topic
+                          </button>
+                          <button
+                            onClick={shareLink}
+                            style={{
+                              background: "transparent",
+                              border: `1px solid ${T.border}`,
+                              borderRadius: 8,
+                              padding: "12px 24px",
+                              color: copied ? T.successText : T.textMuted,
+                              cursor: "pointer",
+                              fontSize: 15,
+                              fontWeight: 500,
+                            }}
+                          >
+                            {copied ? "✓ Copied!" : "↗ Share this lesson"}
+                          </button>
+                          <button
+                            onClick={() =>
+                              switchLevel(level === "b1" ? "b1plus" : "b1")
+                            }
+                            style={{
+                              background: lvlBg,
+                              border: `1px solid ${lvlBorder}`,
+                              borderRadius: 8,
+                              padding: "12px 24px",
+                              color: lvlColor,
+                              cursor: "pointer",
+                              fontSize: 15,
+                              fontWeight: 700,
+                            }}
+                          >
+                            {level === "b1" ? "Try B1+" : "Try B1"} →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-              <span style={{ fontSize: 12, color: T.textFaint }}>
-                {dateStr}
-              </span>
-            </div>
-          </header>
+            )}
 
-          {/* LOADING */}
-          {loading && (
-            <div style={{ textAlign: "center", padding: "100px 0" }}>
-              <div
-                style={{
-                  display: "inline-flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 20,
-                }}
-              >
-                <div style={{ position: "relative", width: 44, height: 44 }}>
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      border: `1.5px solid ${T.border}`,
-                      borderRadius: "50%",
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      border: "1.5px solid transparent",
-                      borderTopColor: T.accent,
-                      borderRadius: "50%",
-                      animation: "spin 0.9s linear infinite",
-                    }}
-                  />
-                </div>
-                <span
-                  style={{
-                    fontSize: 13,
-                    color: T.textFaint,
-                    fontStyle: "italic",
-                    fontFamily: "'Fraunces', serif",
-                  }}
-                >
-                  Crafting your {LVL.label} lesson…
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* ERROR */}
-          {error && (
-            <div
+            <footer
               style={{
-                background: "rgba(239,68,68,0.06)",
-                borderLeft: "3px solid #ef4444",
-                borderRadius: "0 8px 8px 0",
-                padding: "16px 20px",
-                marginBottom: 20,
+                marginTop: 80,
+                paddingTop: 24,
+                borderTop: `1px solid ${T.border}`,
+                display: "flex",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: 8,
               }}
             >
-              <div style={{ color: "#fca5a5", fontSize: 13, marginBottom: 10 }}>
-                {error}
-              </div>
-              <button
-                onClick={fetchContent}
+              <span
                 style={{
-                  background: "transparent",
-                  border: `1px solid ${T.accentBorder}`,
-                  borderRadius: 6,
-                  padding: "7px 18px",
-                  color: T.accentText,
-                  cursor: "pointer",
-                  fontSize: 13,
+                  fontSize: 12,
+                  color: T.textFaintest,
+                  letterSpacing: "0.15em",
                   fontWeight: 600,
                 }}
               >
-                Try again
-              </button>
-            </div>
-          )}
-
-          {/* CONTENT */}
-          {content && !loading && (
-            <div
-              style={{
-                opacity: appear ? 1 : 0,
-                transform: appear ? "none" : "translateY(8px)",
-                transition: "opacity 0.4s ease, transform 0.4s ease",
-              }}
-            >
-              <div
+                WORD & WORLD
+              </span>
+              <span
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  marginBottom: 20,
-                  paddingBottom: 16,
-                  borderBottom: `1px solid ${T.border}`,
+                  fontSize: 12,
+                  color: T.textFaintest,
+                  letterSpacing: "0.1em",
                 }}
               >
-                <span
-                  style={{
-                    fontSize: 12,
-                    color: lvlColor,
-                    fontWeight: 600,
-                    background: lvlBg,
-                    border: `1px solid ${lvlBorder}`,
-                    borderRadius: 4,
-                    padding: "2px 10px",
-                  }}
-                >
-                  {LVL.fullLabel}
-                </span>
-                <span style={{ fontSize: 12, color: T.textFaint }}>
-                  {LVL.description}
-                </span>
-              </div>
-
-              {/* Tabs */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: 0,
-                  marginBottom: 28,
-                  borderBottom: `1px solid ${T.border}`,
-                }}
-              >
-                {[
-                  ["story", "Story"],
-                  ["vocabulary", "Words"],
-                  ["questions", "Questions"],
-                ].map(([t, label]) => (
-                  <button
-                    key={t}
-                    onClick={() => setTab(t)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      padding: "10px 20px",
-                      fontSize: 14,
-                      fontFamily: "'Outfit', sans-serif",
-                      fontWeight: tab === t ? 600 : 400,
-                      color: tab === t ? T.accentText : T.tabText,
-                      borderBottom: `2px solid ${
-                        tab === t ? T.accent : "transparent"
-                      }`,
-                      marginBottom: -1,
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* STORY */}
-              {tab === "story" && (
-                <div style={{ animation: "fadeUp 0.3s ease" }}>
-                  <div
-                    style={{
-                      background: lvlBg,
-                      borderLeft: `3px solid ${lvlColor}`,
-                      borderRadius: "0 6px 6px 0",
-                      padding: "10px 16px",
-                      marginBottom: 24,
-                      fontSize: 12,
-                      color: lvlColor,
-                    }}
-                  >
-                    {level === "b1"
-                      ? "Read carefully. Understand the main idea first, then read for details."
-                      : "Notice how ideas connect between sentences. Pay attention to structure."}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "clamp(16px, 2.5vw, 18px)",
-                      lineHeight: 2,
-                      color: T.storyText,
-                      marginBottom: 32,
-                      fontFamily: "'Outfit', sans-serif",
-                      fontWeight: 300,
-                      letterSpacing: "0.01em",
-                    }}
-                  >
-                    {highlighted
-                      ? renderHighlighted(content.story)
-                      : content.story}
-                  </div>
-
-                  {content.idioms?.length > 0 && (
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          fontSize: 10,
-                          letterSpacing: "0.3em",
-                          textTransform: "uppercase",
-                          color: T.textFaint,
-                          marginBottom: 14,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Idioms in this story
-                      </div>
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns:
-                            "repeat(auto-fill, minmax(min(100%, 280px), 1fr))",
-                          gap: 8,
-                        }}
-                      >
-                        {content.idioms.map((id, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              background: T.idiomBg,
-                              borderLeft: `2px solid ${T.idiomText}`,
-                              borderRadius: "0 8px 8px 0",
-                              padding: "10px 14px",
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: 14,
-                                color: T.idiomText,
-                                fontFamily: "'Fraunces', serif",
-                                fontStyle: "italic",
-                                marginBottom: 3,
-                              }}
-                            >
-                              "{id.idiom}"
-                            </div>
-                            <div style={{ fontSize: 12, color: T.idiomMuted }}>
-                              {id.meaning}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 10,
-                      paddingTop: 16,
-                      borderTop: `1px solid ${T.border}`,
-                    }}
-                  >
-                    <button
-                      onClick={() => setTab("vocabulary")}
-                      style={{
-                        background: "transparent",
-                        border: `1px solid ${T.border}`,
-                        borderRadius: 8,
-                        padding: "10px 22px",
-                        color: T.textMuted,
-                        cursor: "pointer",
-                        fontSize: 13,
-                        fontWeight: 500,
-                      }}
-                    >
-                      Study words →
-                    </button>
-                    <button
-                      onClick={() => setTab("questions")}
-                      style={{
-                        background: T.accent,
-                        border: "none",
-                        borderRadius: 8,
-                        padding: "10px 22px",
-                        color: isDark ? "#1c1814" : "#fff",
-                        cursor: "pointer",
-                        fontSize: 13,
-                        fontWeight: 600,
-                      }}
-                    >
-                      Answer questions →
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* VOCABULARY */}
-              {tab === "vocabulary" && (
-                <div style={{ animation: "fadeUp 0.3s ease" }}>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: T.textFaint,
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase",
-                      marginBottom: 18,
-                      fontWeight: 600,
-                    }}
-                  >
-                    🔈 Tap speaker to hear · tap card to highlight in story ·{" "}
-                    {content.vocabulary?.length} words
-                  </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns:
-                        "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
-                      gap: 10,
-                      marginBottom: 36,
-                    }}
-                  >
-                    {content.vocabulary?.map((item, i) => (
-                      <VocabCard
-                        key={i}
-                        item={item}
-                        T={T}
-                        isDark={isDark}
-                        active={highlighted === item.word}
-                        onHighlight={(word) => {
-                          setHighlighted(highlighted === word ? null : word);
-                          if (highlighted !== word) setTab("story");
-                        }}
-                      />
-                    ))}
-                  </div>
-
-                  {content.idioms?.length > 0 && (
-                    <div style={{ marginBottom: 32 }}>
-                      <div
-                        style={{
-                          fontSize: 10,
-                          letterSpacing: "0.3em",
-                          textTransform: "uppercase",
-                          color: T.textFaint,
-                          marginBottom: 14,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Idioms & Fixed Phrases
-                      </div>
-                      <div style={{ display: "grid", gap: 8 }}>
-                        {content.idioms.map((item, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              background: T.idiomBg,
-                              borderLeft: `2px solid ${T.idiomText}`,
-                              borderRadius: "0 8px 8px 0",
-                              padding: "12px 16px",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 10,
-                                marginBottom: 4,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontSize: 14,
-                                  color: T.idiomText,
-                                  fontFamily: "'Fraunces', serif",
-                                  fontStyle: "italic",
-                                }}
-                              >
-                                "{item.idiom}"
-                              </span>
-                              <button
-                                onClick={() => speakWord(item.idiom)}
-                                style={{
-                                  background: T.speakBg,
-                                  border: "none",
-                                  borderRadius: "50%",
-                                  width: 24,
-                                  height: 24,
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  cursor: "pointer",
-                                  fontSize: 11,
-                                  color: T.speakText,
-                                  flexShrink: 0,
-                                }}
-                              >
-                                🔈
-                              </button>
-                            </div>
-                            <div
-                              style={{
-                                fontSize: 13,
-                                color: T.textMuted,
-                                marginBottom: item.used_in ? 3 : 0,
-                              }}
-                            >
-                              {item.meaning}
-                            </div>
-                            {item.used_in && (
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  color: T.textFaint,
-                                  fontStyle: "italic",
-                                }}
-                              >
-                                "{item.used_in}"
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div
-                    style={{
-                      paddingTop: 16,
-                      borderTop: `1px solid ${T.border}`,
-                    }}
-                  >
-                    <button
-                      onClick={() => setTab("questions")}
-                      style={{
-                        background: T.accent,
-                        border: "none",
-                        borderRadius: 8,
-                        padding: "10px 22px",
-                        color: isDark ? "#1c1814" : "#fff",
-                        cursor: "pointer",
-                        fontSize: 13,
-                        fontWeight: 600,
-                      }}
-                    >
-                      Answer questions →
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* QUESTIONS */}
-              {tab === "questions" && (
-                <div style={{ animation: "fadeUp 0.3s ease" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <span style={{ fontSize: 12, color: T.textFaint }}>
-                      Progress
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 13,
-                        color: T.accentText,
-                        fontWeight: 600,
-                        fontFamily: "'Fraunces', serif",
-                      }}
-                    >
-                      {answeredCount} / {totalQ}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      height: 3,
-                      background: T.border,
-                      borderRadius: 2,
-                      marginBottom: 32,
-                      overflow: "hidden",
-                    }}
-                  >
-                    <div
-                      style={{
-                        height: "100%",
-                        width: `${(answeredCount / (totalQ || 1)) * 100}%`,
-                        background: T.accent,
-                        borderRadius: 2,
-                        transition: "width 0.4s ease",
-                      }}
-                    />
-                  </div>
-
-                  <div style={{ marginBottom: 32 }}>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        letterSpacing: "0.3em",
-                        textTransform: "uppercase",
-                        color: T.accentText,
-                        marginBottom: 4,
-                        fontWeight: 600,
-                      }}
-                    >
-                      Comprehension
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: T.textFaint,
-                        marginBottom: 16,
-                      }}
-                    >
-                      Based on the story
-                    </div>
-                    {content.questions?.map((q, i) =>
-                      q.type === "comprehension" ? (
-                        <QuestionCard
-                          key={i}
-                          q={q}
-                          i={i}
-                          T={T}
-                          isDark={isDark}
-                          answer={answers[i]}
-                          setAnswer={(v) =>
-                            setAnswers((a) => ({ ...a, [i]: v }))
-                          }
-                          isSubmitted={!!submitted[i]}
-                          onSubmit={() => {
-                            if (answers[i]?.trim())
-                              setSubmitted((s) => ({ ...s, [i]: true }));
-                          }}
-                        />
-                      ) : null
-                    )}
-                  </div>
-
-                  <div style={{ marginBottom: 32 }}>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        letterSpacing: "0.3em",
-                        textTransform: "uppercase",
-                        color: T.idiomText,
-                        marginBottom: 4,
-                        fontWeight: 600,
-                      }}
-                    >
-                      Discussion
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: T.textFaint,
-                        marginBottom: 16,
-                      }}
-                    >
-                      Your thoughts & experience
-                    </div>
-                    {content.questions?.map((q, i) =>
-                      q.type === "discussion" ? (
-                        <QuestionCard
-                          key={i}
-                          q={q}
-                          i={i}
-                          T={T}
-                          isDark={isDark}
-                          answer={answers[i]}
-                          setAnswer={(v) =>
-                            setAnswers((a) => ({ ...a, [i]: v }))
-                          }
-                          isSubmitted={!!submitted[i]}
-                          onSubmit={() => {
-                            if (answers[i]?.trim())
-                              setSubmitted((s) => ({ ...s, [i]: true }));
-                          }}
-                        />
-                      ) : null
-                    )}
-                  </div>
-
-                  {allDone && (
-                    <div
-                      style={{
-                        textAlign: "center",
-                        background: lvlBg,
-                        border: `1px solid ${lvlBorder}`,
-                        borderRadius: 12,
-                        padding: "36px 24px",
-                        marginTop: 16,
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontFamily: "'Fraunces', serif",
-                          fontSize: 42,
-                          marginBottom: 12,
-                        }}
-                      >
-                        🎓
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: "'Fraunces', serif",
-                          fontSize: 26,
-                          color: lvlColor,
-                          marginBottom: 6,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Lesson complete
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 14,
-                          color: T.textFaint,
-                          marginBottom: 24,
-                        }}
-                      >
-                        All 15 questions answered. Well done.
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 10,
-                          justifyContent: "center",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <button
-                          onClick={regenerate}
-                          style={{
-                            background: T.accent,
-                            border: "none",
-                            borderRadius: 8,
-                            padding: "10px 22px",
-                            color: isDark ? "#1c1814" : "#fff",
-                            cursor: "pointer",
-                            fontSize: 13,
-                            fontWeight: 600,
-                          }}
-                        >
-                          ↻ New topic
-                        </button>
-                        <button
-                          onClick={shareLink}
-                          style={{
-                            background: "transparent",
-                            border: `1px solid ${T.border}`,
-                            borderRadius: 8,
-                            padding: "10px 22px",
-                            color: copied ? T.successText : T.textMuted,
-                            cursor: "pointer",
-                            fontSize: 13,
-                            fontWeight: 500,
-                          }}
-                        >
-                          {copied ? "✓ Copied!" : "↗ Share this lesson"}
-                        </button>
-                        <button
-                          onClick={() =>
-                            switchLevel(level === "b1" ? "b1plus" : "b1")
-                          }
-                          style={{
-                            background: lvlBg,
-                            border: `1px solid ${lvlBorder}`,
-                            borderRadius: 8,
-                            padding: "10px 22px",
-                            color: lvlColor,
-                            cursor: "pointer",
-                            fontSize: 13,
-                            fontWeight: 600,
-                          }}
-                        >
-                          {level === "b1" ? "Try B1+" : "Try B1"} →
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          <footer
-            style={{
-              marginTop: 80,
-              paddingTop: 24,
-              borderTop: `1px solid ${T.border}`,
-              display: "flex",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-              gap: 8,
-            }}
-          >
-            <span
-              style={{
-                fontSize: 11,
-                color: T.textFaintest,
-                letterSpacing: "0.15em",
-                fontWeight: 500,
-              }}
-            >
-              WORD & WORLD
-            </span>
-            <span
-              style={{
-                fontSize: 11,
-                color: T.textFaintest,
-                letterSpacing: "0.1em",
-              }}
-            >
-              {LVL.fullLabel.toUpperCase()} · {dateStr.toUpperCase()}
-            </span>
-          </footer>
+                {LVL.fullLabel.toUpperCase()} · {dateStr.toUpperCase()}
+              </span>
+            </footer>
+          </div>
         </div>
+
+        {/* WORD TOOLTIP — bottom sheet */}
+        {tooltipWord && (
+          <div data-tooltip-root>
+            {/* backdrop */}
+            <div
+              onClick={() => setTooltipWord(null)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 999,
+                background: "rgba(0,0,0,0.3)",
+              }}
+            />
+            <WordTooltip
+              word={tooltipWord}
+              T={T}
+              isDark={isDark}
+              onClose={() => setTooltipWord(null)}
+            />
+          </div>
+        )}
 
         <style>{`
           @keyframes spin { to { transform: rotate(360deg); } }
           @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+          @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
           * { box-sizing: border-box; }
           ::-webkit-scrollbar { width: 4px; }
           ::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.12); border-radius: 2px; }
-          textarea, button, input { font-family: 'Outfit', sans-serif !important; }
+          body { margin: 0; }
+          textarea, button, input { font-family: 'Inter', sans-serif !important; }
           textarea::placeholder, input::placeholder { color: ${T.textFaint}; }
         `}</style>
       </div>
