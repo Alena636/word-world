@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 const TOPICS = [
   "Urban exploration",
@@ -267,7 +267,7 @@ function parseJSON(text) {
       try {
         return JSON.parse(m[0]);
       } catch {
-        console.log('error')
+        console.log("error");
       }
   }
   return null;
@@ -292,14 +292,12 @@ function VocabCard({ item, active, T, isDark, onHighlight }) {
   const [speaking, setSpeaking] = useState(false);
   const tc = TYPE_COLORS[isDark ? "dark" : "light"];
   const c = tc[item.type] || tc.noun;
-
   const handleSpeak = (e) => {
     e.stopPropagation();
     setSpeaking(true);
     speakWord(item.word);
     setTimeout(() => setSpeaking(false), 1200);
   };
-
   return (
     <div
       onClick={() => onHighlight(item.word)}
@@ -421,7 +419,17 @@ function VocabCard({ item, active, T, isDark, onHighlight }) {
   );
 }
 
-function QuestionCard({ q, i, T, isDark, answer, setAnswer, isSubmitted, onSubmit }) {  const isComp = q.type === "comprehension";
+function QuestionCard({
+  q,
+  i,
+  T,
+  isDark,
+  answer,
+  setAnswer,
+  isSubmitted,
+  onSubmit,
+}) {
+  const isComp = q.type === "comprehension";
   return (
     <div
       style={{
@@ -540,11 +548,6 @@ function QuestionCard({ q, i, T, isDark, answer, setAnswer, isSubmitted, onSubmi
   );
 }
 
-// expose isDark to QuestionCard — wrap
-function QuestionCardWrapper(props) {
-  return <QuestionCard {...props} />;
-}
-
 export default function WordAndWorld() {
   const [isDark, setIsDark] = useState(true);
   const [level, setLevel] = useState(() => {
@@ -567,6 +570,18 @@ export default function WordAndWorld() {
   const [appear, setAppear] = useState(() => !!getSharedContent());
   const [regenCount, setRegenCount] = useState(0);
   const [copied, setCopied] = useState(false);
+
+  // ── custom topic state ──────────────────────────────────────────
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customTopicInput, setCustomTopicInput] = useState("");
+  const [activeTopic, setActiveTopic] = useState(() => {
+    // if shared lesson, show its topic name
+    const shared = getSharedContent();
+    return shared?._topic || null;
+  });
+  const customTopicRef = useRef(null);
+  // ───────────────────────────────────────────────────────────────
+
   const isSharedLesson = !!new URLSearchParams(window.location.search).get("c");
 
   useEffect(() => {
@@ -580,7 +595,7 @@ export default function WordAndWorld() {
   const lvlColor = isDark ? LVL.colorDark : LVL.color;
   const lvlBg = isDark ? LVL.colorBgDark : LVL.colorBg;
   const lvlBorder = isDark ? LVL.colorBorderDark : LVL.colorBorder;
-  const DAILY_TOPIC = TOPICS[topicIndex];
+  const DAILY_TOPIC = activeTopic || TOPICS[topicIndex];
   const DAILY_SEED = `${DAILY_SEED_BASE}-${regenCount}-${level}`;
 
   const fetchContent = useCallback(async () => {
@@ -592,8 +607,13 @@ export default function WordAndWorld() {
     setSubmitted({});
     setHighlighted(null);
     setTab("story");
+
+    const topicToUse =
+      customTopicRef.current || activeTopic || TOPICS[topicIndex];
+    customTopicRef.current = null;
+
     try {
-      const cacheKey = `ww_${level}_${DAILY_SEED}_${topicIndex}`;
+      const cacheKey = `ww_${level}_${DAILY_SEED}_${topicToUse}`;
       const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
         setContent(JSON.parse(cached));
@@ -616,7 +636,7 @@ export default function WordAndWorld() {
               { role: "system", content: LVL.prompt },
               {
                 role: "user",
-                content: `Topic: "${DAILY_TOPIC}". Seed: ${DAILY_SEED}. Return ONLY raw JSON.`,
+                content: `Topic: "${topicToUse}". Seed: ${DAILY_SEED}. Return ONLY raw JSON.`,
               },
             ],
           }),
@@ -627,14 +647,14 @@ export default function WordAndWorld() {
       const parsed = parseJSON(raw);
       if (!parsed) throw new Error("Could not parse response. Please retry.");
       sessionStorage.setItem(cacheKey, JSON.stringify(parsed));
-      setContent(parsed);
+      setContent({ ...parsed, _topic: topicToUse });
       setTimeout(() => setAppear(true), 50);
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [DAILY_SEED, topicIndex, DAILY_TOPIC, level, LVL]);
+  }, [DAILY_SEED, topicIndex, activeTopic, level, LVL]);
 
   useEffect(() => {
     if (!getSharedContent()) fetchContent();
@@ -644,6 +664,19 @@ export default function WordAndWorld() {
     window.history.replaceState(null, "", window.location.pathname);
     const newIdx = Math.floor(Math.random() * TOPICS.length);
     setTopicIndex(newIdx);
+    setActiveTopic(null);
+    setRegenCount((c) => c + 1);
+  };
+
+  const handleCustomTopicSubmit = (e) => {
+    e.preventDefault();
+    const val = customTopicInput.trim();
+    if (!val) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    customTopicRef.current = val;
+    setActiveTopic(val);
+    setCustomTopicInput("");
+    setShowCustomInput(false);
     setRegenCount((c) => c + 1);
   };
 
@@ -656,9 +689,10 @@ export default function WordAndWorld() {
 
   const shareLink = () => {
     if (!content) return;
+    const topicForShare = content._topic || DAILY_TOPIC;
     const encoded = encodeContent({
       ...content,
-      _topic: DAILY_TOPIC,
+      _topic: topicForShare,
       _level: level,
     });
     const url = `${window.location.origin}${window.location.pathname}?t=${topicIndex}&lvl=${level}&c=${encoded}`;
@@ -701,7 +735,7 @@ export default function WordAndWorld() {
     Object.keys(submitted).length >= content.questions.length;
   const answeredCount = Object.keys(submitted).length;
   const totalQ = content?.questions?.length || 0;
-  const sharedTopic = content?._topic || DAILY_TOPIC;
+  const displayTopic = content?._topic || DAILY_TOPIC;
 
   const iconBtn = (onClick, children, opts = {}) => (
     <button
@@ -744,7 +778,6 @@ export default function WordAndWorld() {
           transition: "background 0.3s, color 0.25s",
         }}
       >
-        {/* thin top accent line */}
         <div
           style={{
             height: 3,
@@ -759,7 +792,7 @@ export default function WordAndWorld() {
             padding: "clamp(24px,5vw,48px) clamp(20px,4vw,28px) 120px",
           }}
         >
-          {/* ── HEADER ── */}
+          {/* HEADER */}
           <header style={{ marginBottom: 40 }}>
             <div
               style={{
@@ -771,7 +804,6 @@ export default function WordAndWorld() {
                 marginBottom: 28,
               }}
             >
-              {/* Logo */}
               <div>
                 <div
                   style={{
@@ -824,37 +856,121 @@ export default function WordAndWorld() {
                     pointerEvents: content ? "auto" : "none",
                   },
                 })}
-                <button
-                  onClick={regenerate}
-                  disabled={loading}
-                  style={{
-                    background: T.accent,
-                    border: "none",
-                    borderRadius: 8,
-                    height: 36,
-                    padding: "0 16px",
-                    cursor: loading ? "not-allowed" : "pointer",
-                    fontSize: 13,
-                    color: isDark ? "#1c1814" : "#fff",
-                    fontFamily: "'Outfit', sans-serif",
-                    fontWeight: 600,
-                    opacity: loading ? 0.6 : 1,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    transition: "opacity 0.15s",
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "inline-block",
-                      animation: loading ? "spin 1s linear infinite" : "none",
-                    }}
+
+                {/* ── custom topic input or buttons ── */}
+                {showCustomInput ? (
+                  <form
+                    onSubmit={handleCustomTopicSubmit}
+                    style={{ display: "flex", gap: 6, alignItems: "center" }}
                   >
-                    ↻
-                  </span>
-                  New topic
-                </button>
+                    <input
+                      autoFocus
+                      value={customTopicInput}
+                      onChange={(e) => setCustomTopicInput(e.target.value)}
+                      placeholder="e.g. Hiking in Norway…"
+                      style={{
+                        background: T.inputBg,
+                        border: `1px solid ${T.accentBorder}`,
+                        borderRadius: 8,
+                        height: 36,
+                        padding: "0 12px",
+                        color: T.text,
+                        fontSize: 13,
+                        outline: "none",
+                        fontFamily: "'Outfit', sans-serif",
+                        width: "clamp(140px, 20vw, 200px)",
+                        transition: "border-color 0.15s",
+                      }}
+                      onFocus={(e) => (e.target.style.borderColor = T.accent)}
+                      onBlur={(e) =>
+                        (e.target.style.borderColor = T.accentBorder)
+                      }
+                    />
+                    <button
+                      type="submit"
+                      disabled={!customTopicInput.trim()}
+                      style={{
+                        background: customTopicInput.trim()
+                          ? T.accent
+                          : T.surfaceEl,
+                        border: "none",
+                        borderRadius: 8,
+                        height: 36,
+                        padding: "0 14px",
+                        color: customTopicInput.trim()
+                          ? isDark
+                            ? "#1c1814"
+                            : "#fff"
+                          : T.textFaint,
+                        cursor: customTopicInput.trim() ? "pointer" : "default",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      Go
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCustomInput(false);
+                        setCustomTopicInput("");
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: `1px solid ${T.border}`,
+                        borderRadius: 8,
+                        height: 36,
+                        width: 36,
+                        cursor: "pointer",
+                        color: T.textMuted,
+                        fontSize: 16,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </form>
+                ) : (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {iconBtn(() => setShowCustomInput(true), "✎ Own topic")}
+                    <button
+                      onClick={regenerate}
+                      disabled={loading}
+                      style={{
+                        background: T.accent,
+                        border: "none",
+                        borderRadius: 8,
+                        height: 36,
+                        padding: "0 16px",
+                        cursor: loading ? "not-allowed" : "pointer",
+                        fontSize: 13,
+                        color: isDark ? "#1c1814" : "#fff",
+                        fontFamily: "'Outfit', sans-serif",
+                        fontWeight: 600,
+                        opacity: loading ? 0.6 : 1,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        transition: "opacity 0.15s",
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "inline-block",
+                          animation: loading
+                            ? "spin 1s linear infinite"
+                            : "none",
+                        }}
+                      >
+                        ↻
+                      </span>
+                      New topic
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1003,8 +1119,26 @@ export default function WordAndWorld() {
                     fontStyle: "italic",
                   }}
                 >
-                  {sharedTopic}
+                  {displayTopic}
                 </span>
+                {/* badge if custom */}
+                {activeTopic && !isSharedLesson && (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                      background: T.accentBg,
+                      color: T.accentText,
+                      border: `1px solid ${T.accentBorder}`,
+                      borderRadius: 4,
+                      padding: "1px 7px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    custom
+                  </span>
+                )}
               </div>
               <span style={{ fontSize: 12, color: T.textFaint }}>
                 {dateStr}
@@ -1012,7 +1146,7 @@ export default function WordAndWorld() {
             </div>
           </header>
 
-          {/* ── LOADING ── */}
+          {/* LOADING */}
           {loading && (
             <div style={{ textAlign: "center", padding: "100px 0" }}>
               <div
@@ -1057,7 +1191,7 @@ export default function WordAndWorld() {
             </div>
           )}
 
-          {/* ── ERROR ── */}
+          {/* ERROR */}
           {error && (
             <div
               style={{
@@ -1089,7 +1223,7 @@ export default function WordAndWorld() {
             </div>
           )}
 
-          {/* ── CONTENT ── */}
+          {/* CONTENT */}
           {content && !loading && (
             <div
               style={{
@@ -1098,7 +1232,6 @@ export default function WordAndWorld() {
                 transition: "opacity 0.4s ease, transform 0.4s ease",
               }}
             >
-              {/* level strip */}
               <div
                 style={{
                   display: "flex",
@@ -1127,7 +1260,7 @@ export default function WordAndWorld() {
                 </span>
               </div>
 
-              {/* Tabs — underline style */}
+              {/* Tabs */}
               <div
                 style={{
                   display: "flex",
@@ -1165,7 +1298,7 @@ export default function WordAndWorld() {
                 ))}
               </div>
 
-              {/* ── STORY ── */}
+              {/* STORY */}
               {tab === "story" && (
                 <div style={{ animation: "fadeUp 0.3s ease" }}>
                   <div
@@ -1183,7 +1316,6 @@ export default function WordAndWorld() {
                       ? "Read carefully. Understand the main idea first, then read for details."
                       : "Notice how ideas connect between sentences. Pay attention to structure."}
                   </div>
-
                   <div
                     style={{
                       fontSize: "clamp(16px, 2.5vw, 18px)",
@@ -1294,7 +1426,7 @@ export default function WordAndWorld() {
                 </div>
               )}
 
-              {/* ── VOCABULARY ── */}
+              {/* VOCABULARY */}
               {tab === "vocabulary" && (
                 <div style={{ animation: "fadeUp 0.3s ease" }}>
                   <div
@@ -1310,7 +1442,6 @@ export default function WordAndWorld() {
                     🔈 Tap speaker to hear · tap card to highlight in story ·{" "}
                     {content.vocabulary?.length} words
                   </div>
-
                   <div
                     style={{
                       display: "grid",
@@ -1449,10 +1580,9 @@ export default function WordAndWorld() {
                 </div>
               )}
 
-              {/* ── QUESTIONS ── */}
+              {/* QUESTIONS */}
               {tab === "questions" && (
                 <div style={{ animation: "fadeUp 0.3s ease" }}>
-                  {/* Progress */}
                   <div
                     style={{
                       display: "flex",
@@ -1495,7 +1625,6 @@ export default function WordAndWorld() {
                     />
                   </div>
 
-                  {/* Comprehension section */}
                   <div style={{ marginBottom: 32 }}>
                     <div
                       style={{
@@ -1520,7 +1649,7 @@ export default function WordAndWorld() {
                     </div>
                     {content.questions?.map((q, i) =>
                       q.type === "comprehension" ? (
-                        <QuestionCardWrapper
+                        <QuestionCard
                           key={i}
                           q={q}
                           i={i}
@@ -1540,7 +1669,6 @@ export default function WordAndWorld() {
                     )}
                   </div>
 
-                  {/* Discussion section */}
                   <div style={{ marginBottom: 32 }}>
                     <div
                       style={{
@@ -1565,7 +1693,7 @@ export default function WordAndWorld() {
                     </div>
                     {content.questions?.map((q, i) =>
                       q.type === "discussion" ? (
-                        <QuestionCardWrapper
+                        <QuestionCard
                           key={i}
                           q={q}
                           i={i}
@@ -1728,7 +1856,7 @@ export default function WordAndWorld() {
           ::-webkit-scrollbar { width: 4px; }
           ::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.12); border-radius: 2px; }
           textarea, button, input { font-family: 'Outfit', sans-serif !important; }
-          textarea::placeholder { color: ${T.textFaint}; }
+          textarea::placeholder, input::placeholder { color: ${T.textFaint}; }
         `}</style>
       </div>
     </>
