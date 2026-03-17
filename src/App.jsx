@@ -293,11 +293,94 @@ function speakWord(word) {
 }
 
 // ── Word Tooltip ─────────────────────────────────────────────────
+// ── Clickable Story Text — ALL words clickable ───────────────────
+function ClickableStory({ text, vocabulary, highlighted, T, onWordClick }) {
+  if (!text) return null;
+
+  const vocabMap = {};
+  (vocabulary || []).forEach(item => {
+    vocabMap[item.word.toLowerCase()] = item;
+  });
+
+  // split into word tokens and separators (spaces, punctuation)
+  const tokens = text.split(/(\s+|[.,!?;:"""''()\-–—\n])/);
+
+  return (
+    <span>
+      {tokens.map((token, i) => {
+        const clean = token.replace(/[^a-zA-Z'-]/g, "").toLowerCase();
+
+        // skip pure punctuation / spaces — not clickable
+        if (!clean) return <span key={i}>{token}</span>;
+
+        const vocabItem = vocabMap[clean];
+        const isHighlighted = highlighted && clean === highlighted.toLowerCase();
+        const isVocab = !!vocabItem;
+
+        return (
+          <span
+            key={i}
+            onClick={() => onWordClick(vocabItem || { word: clean })}
+            style={{
+              cursor: "pointer",
+              borderBottom: isVocab
+                ? `2px solid ${isHighlighted ? "#fbbf24" : T.accent}`
+                : `1px dotted ${T.textFaint}`,
+              background: isHighlighted ? "rgba(251,191,36,0.15)" : "transparent",
+              borderRadius: 2,
+              padding: "0 1px",
+              transition: "background 0.1s",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            {token}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+// ── Word Tooltip — translation + pronunciation ────────────────────
+// определяем язык по таймзоне — один раз при загрузке
+const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const TRANSLATION_LANG = userTZ === "Europe/Vilnius" ? { code: "lt", label: "Vertimas", flag: "🇱🇹" }
+  : userTZ === "Europe/Minsk" ? { code: "ru", label: "Перевод", flag: "🇧🇾" }
+  : { code: "ru", label: "Перевод", flag: "🇷🇺" }; // дефолт — русский
+
 function WordTooltip({ word, T, isDark, onClose }) {
   const [speaking, setSpeaking] = useState(false);
-  if (!word) return null;
+  const [translation, setTranslation] = useState(null);
+  const [translating, setTranslating] = useState(false);
   const tc = TYPE_COLORS[isDark ? "dark" : "light"];
-  const c = tc[word.type] || tc.noun;
+  const c = word.type ? (tc[word.type] || tc.noun) : null;
+
+  useEffect(() => {
+    if (!word?.word) return;
+    let cancelled = false;
+
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      setTranslation(null);
+      setTranslating(true);
+
+      fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word.word)}&langpair=en|${TRANSLATION_LANG.code}`)
+        .then(r => r.json())
+        .then(data => {
+          if (cancelled) return;
+          const t = data?.responseData?.translatedText;
+          setTranslation(t && t.toLowerCase() !== word.word.toLowerCase() ? t : null);
+        })
+        .catch(() => { if (!cancelled) setTranslation(null); })
+        .finally(() => { if (!cancelled) setTranslating(false); });
+    }, 0);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [word?.word]);
+
+  useEffect(() => {
+    if (word?.word) speakWord(word.word);
+  }, [word?.word]);
 
   const handleSpeak = () => {
     setSpeaking(true);
@@ -306,214 +389,94 @@ function WordTooltip({ word, T, isDark, onClose }) {
   };
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        zIndex: 1000,
-        background: T.tooltipBg,
-        borderTop: `2px solid ${T.accent}`,
-        borderRadius: "16px 16px 0 0",
-        padding: "20px 20px 32px",
-        boxShadow: "0 -8px 40px rgba(0,0,0,0.25)",
-        animation: "slideUp 0.22s ease",
-      }}
-    >
-      {/* drag handle */}
-      <div
-        style={{
-          width: 36,
-          height: 3,
-          borderRadius: 2,
-          background: T.border,
-          margin: "0 auto 18px",
-        }}
-      />
+    <div style={{
+      position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 1000,
+      background: T.tooltipBg, borderTop: `2px solid ${T.accent}`,
+      borderRadius: "16px 16px 0 0", padding: "20px 20px 44px",
+      boxShadow: "0 -8px 40px rgba(0,0,0,0.3)",
+      animation: "slideUp 0.22s ease", maxHeight: "75vh", overflowY: "auto",
+    }}>
+      <div style={{ width: 40, height: 4, borderRadius: 2, background: T.border, margin: "0 auto 20px" }} />
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          marginBottom: 12,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              color: T.text,
-              fontFamily: "'Inter', sans-serif",
-            }}
-          >
+      {/* header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", flex: 1 }}>
+          <span style={{ fontSize: 26, fontWeight: 800, color: T.text, letterSpacing: "-0.02em" }}>
             {word.word}
           </span>
-          <button
-            onClick={handleSpeak}
-            style={{
-              background: speaking ? T.accentBg : T.speakBg,
-              border: `1px solid ${speaking ? T.accentBorder : "transparent"}`,
-              borderRadius: "50%",
-              width: 36,
-              height: 36,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              fontSize: 16,
-              color: T.speakText,
-              transform: speaking ? "scale(1.15)" : "scale(1)",
-              transition: "all 0.12s",
-            }}
-          >
-            {speaking ? "🔊" : "🔈"}
-          </button>
-          <span
-            style={{
-              fontSize: 10,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-              color: c.accent,
-              background: c.bg,
-              border: `1px solid ${c.border}`,
-              borderRadius: 4,
-              padding: "3px 10px",
-              fontWeight: 700,
-            }}
-          >
-            {word.type}
-          </span>
+          <button onClick={handleSpeak} style={{
+            background: speaking ? T.accentBg : T.speakBg,
+            border: `1px solid ${speaking ? T.accentBorder : "transparent"}`,
+            borderRadius: "50%", width: 40, height: 40,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", fontSize: 18, color: T.speakText,
+            transform: speaking ? "scale(1.15)" : "scale(1)",
+            transition: "all 0.12s", flexShrink: 0,
+          }}>{speaking ? "🔊" : "🔈"}</button>
+          {c && word.type && (
+            <span style={{
+              fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase",
+              color: c.accent, background: c.bg, border: `1px solid ${c.border}`,
+              borderRadius: 4, padding: "3px 10px", fontWeight: 700,
+            }}>{word.type}</span>
+          )}
         </div>
-        <button
-          onClick={onClose}
-          style={{
-            background: "transparent",
-            border: `1px solid ${T.border}`,
-            borderRadius: 8,
-            width: 34,
-            height: 34,
-            cursor: "pointer",
-            color: T.textMuted,
-            fontSize: 18,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          ✕
-        </button>
+        <button onClick={onClose} style={{
+          background: "transparent", border: `1px solid ${T.border}`,
+          borderRadius: 8, width: 38, height: 38, cursor: "pointer",
+          color: T.textMuted, fontSize: 20,
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>✕</button>
       </div>
 
+      {/* IPA */}
       {word.ipa && (
-        <div
-          style={{
-            fontSize: 15,
-            color: T.ipaColor,
-            marginBottom: 10,
-            fontFamily: "monospace",
-            letterSpacing: "0.06em",
-          }}
-        >
+        <div style={{ fontSize: 16, color: T.ipaColor, marginBottom: 16, fontFamily: "monospace", letterSpacing: "0.06em" }}>
           {word.ipa}
         </div>
       )}
-      <div
-        style={{
-          fontSize: 17,
-          color: T.text,
-          lineHeight: 1.55,
-          marginBottom: 10,
-          fontWeight: 400,
-        }}
-      >
-        {word.definition}
-      </div>
-      <div
-        style={{
-          fontSize: 15,
-          color: T.textFaint,
-          fontStyle: "italic",
-          lineHeight: 1.5,
-        }}
-      >
-        "{word.example}"
-      </div>
-    </div>
-  );
-}
 
-// ── Clickable Story Text ─────────────────────────────────────────
-function ClickableStory({ text, vocabulary, highlighted, T, onWordClick }) {
-  if (!text) return null;
-
-  // build a map of vocab words (lowercase) → item
-  const vocabMap = {};
-  (vocabulary || []).forEach((item) => {
-    vocabMap[item.word.toLowerCase()] = item;
-  });
-
-  // split text into tokens (words + punctuation/spaces)
-  const tokens = text.split(/(\s+|[.,!?;:"""''()\-–—])/);
-
-  return (
-    <span>
-      {tokens.map((token, i) => {
-        const clean = token.replace(/[^a-zA-Z'-]/g, "").toLowerCase();
-        const vocabItem = vocabMap[clean];
-        const isHighlighted =
-          highlighted && clean === highlighted.toLowerCase();
-
-        if (vocabItem) {
-          return (
-            <span
-              key={i}
-              onClick={() => onWordClick(vocabItem)}
-              style={{
-                cursor: "pointer",
-                borderBottom: `2px solid ${
-                  isHighlighted ? "#fbbf24" : T.accent
-                }`,
-                background: isHighlighted
-                  ? "rgba(251,191,36,0.15)"
-                  : "transparent",
-                borderRadius: 2,
-                padding: "0 1px",
-                transition: "background 0.15s",
-              }}
-            >
-              {token}
+      {/* Translation */}
+      <div style={{
+        background: T.accentBg, border: `1px solid ${T.accentBorder}`,
+        borderRadius: 12, padding: "14px 18px", marginBottom: 16,
+        display: "flex", alignItems: "center", gap: 14,
+      }}>
+        <span style={{ fontSize: 22 }}>{TRANSLATION_LANG.flag}</span>
+        <div>
+          <div style={{ fontSize: 11, color: T.textFaint, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>
+            {TRANSLATION_LANG.label}
+          </div>
+          {translating ? (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: T.accentText, animation: "pulse 1s infinite" }} />
+              <span style={{ fontSize: 15, color: T.textFaint }}>…</span>
+            </div>
+          ) : (
+            <span style={{ fontSize: 22, color: T.accentText, fontWeight: 700, lineHeight: 1.2 }}>
+              {translation || "—"}
             </span>
-          );
-        }
-        if (isHighlighted && clean) {
-          return (
-            <mark
-              key={i}
-              style={{
-                background: "#fde68a",
-                color: "#1c1403",
-                borderRadius: 2,
-                padding: "0 2px",
-              }}
-            >
-              {token}
-            </mark>
-          );
-        }
-        return <span key={i}>{token}</span>;
-      })}
-    </span>
+          )}
+        </div>
+      </div>
+
+      {/* Definition + example for vocab words */}
+      {word.definition && (
+        <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 14 }}>
+          <div style={{ fontSize: 11, color: T.textFaint, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
+            Definition
+          </div>
+          <div style={{ fontSize: 16, color: T.text, lineHeight: 1.6, marginBottom: 8 }}>
+            {word.definition}
+          </div>
+          {word.example && (
+            <div style={{ fontSize: 14, color: T.textFaint, fontStyle: "italic", lineHeight: 1.5 }}>
+              "{word.example}"
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 // ────────────────────────────────────────────────────────────────
